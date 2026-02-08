@@ -1,0 +1,5 @@
+
+{
+  "name": "Velocity Technologies Backup Sentinel",
+  "description": "A robust, modern dashboard for configuring, scheduling, and monitoring automated backups from various sources like SFTP, cPanel, Cisco, and Ubiquiti devices. Features a 'Matrix' inspired dark theme, real-time monitoring, and smart log analysis powered by Gemini."
+}
