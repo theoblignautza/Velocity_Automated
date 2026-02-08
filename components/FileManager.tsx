@@ -8,6 +8,12 @@ const FileManager: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
+  const jobLabels: Record<string, string> = {
+    sftp: 'SFTP Pull',
+    ssh: 'SSH Sync',
+    cpanel: 'cPanel API',
+  };
+
   const loadFiles = async () => {
     setIsLoading(true);
     try {
@@ -16,12 +22,12 @@ const FileManager: React.FC = () => {
         throw new Error('Failed to load archives');
       }
       const data = await response.json();
-      const mappedFiles = (data as Array<{ filename: string; size: string; created: string }>).map(file => ({
+      const mappedFiles = (data as Array<{ filename: string; size: string; created: string; job?: string }>).map(file => ({
         id: file.filename,
         filename: file.filename,
         size: file.size,
         created: file.created,
-        job: 'SFTP Pull',
+        job: jobLabels[file.job || ''] || 'Unknown',
       }));
       setFiles(mappedFiles);
       if (mappedFiles.length === 0) {
@@ -46,8 +52,19 @@ const FileManager: React.FC = () => {
       file.job.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleDelete = (fileId: string) => {
-    setStatusMessage(`Delete request queued for ${fileId}. Backend delete is not configured.`);
+  const handleDelete = async (fileId: string) => {
+    setStatusMessage(`Deleting ${fileId}...`);
+    try {
+      const response = await fetch(`/api/archives/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error('Delete failed');
+      }
+      setFiles(prev => prev.filter(file => file.id !== fileId));
+      setStatusMessage(`Deleted ${fileId}.`);
+    } catch (error) {
+      console.error('Failed to delete archive:', error);
+      setStatusMessage(`Failed to delete ${fileId}.`);
+    }
   };
 
   const handleDownload = (file: BackupFile) => {
@@ -55,8 +72,22 @@ const FileManager: React.FC = () => {
     window.open(`/download_archive/${encodeURIComponent(file.filename)}`, '_blank', 'noopener,noreferrer');
   };
 
-  const handleRestore = (file: BackupFile) => {
-    setStatusMessage(`Restore requested for ${file.filename}.`);
+  const handleRestore = async (file: BackupFile) => {
+    setStatusMessage(`Restore requested for ${file.filename}...`);
+    try {
+      const response = await fetch('/api/archives/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.filename }),
+      });
+      if (!response.ok) {
+        throw new Error('Restore failed');
+      }
+      setStatusMessage(`Restore queued for ${file.filename}.`);
+    } catch (error) {
+      console.error('Failed to request restore:', error);
+      setStatusMessage(`Failed to request restore for ${file.filename}.`);
+    }
   };
 
   return (

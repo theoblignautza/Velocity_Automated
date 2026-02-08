@@ -1,5 +1,5 @@
 
-export type ViewType = 'dashboard' | 'jobs' | 'files' | 'scheduler' | 'settings';
+export type ViewType = 'dashboard' | 'files' | 'scheduler' | 'settings';
 
 export enum JobType {
   SFTP = 'SFTP',
@@ -27,8 +27,11 @@ export interface BackupFile {
 }
 
 export interface Schedule {
-  id: string;
-  jobId: string;
+  id: number;
+  jobType: 'sftp' | 'ssh' | 'cpanel';
+  hour: number;
+  minute: number;
+  days: string[];
   nextRun: string;
 }
 
