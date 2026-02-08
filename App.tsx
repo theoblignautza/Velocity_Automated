@@ -4,7 +4,6 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import BackupJobs from './components/BackupJobs';
 import FileManager from './components/FileManager';
 import Scheduler from './components/Scheduler';
 import Settings from './components/Settings';
@@ -13,6 +12,7 @@ import GlobalBackupNotification from './components/GlobalBackupNotification';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [username, setUsername] = useState<string>('admin');
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const [cpuData, setCpuData] = useState<CpuData[]>([]);
@@ -54,28 +54,20 @@ const App: React.FC = () => {
   }, []);
 
   const handleStartDownload = useCallback(async (methodId: DownloadMethodId) => {
-    if (methodId !== 'sftp') {
-      addLog(`[${methodId.toUpperCase()}] Download method not configured in backend.`);
-      return;
-    }
     try {
-      await fetch('/api/run', { method: 'POST' });
+      await fetch(`/api/run/${methodId}`, { method: 'POST' });
     } catch (error) {
-      console.error('Failed to start SFTP download:', error);
-      addLog('[SFTP] Failed to start download. Check backend connectivity.');
+      console.error(`Failed to start ${methodId} download:`, error);
+      addLog(`[${methodId.toUpperCase()}] Failed to start. Check backend connectivity.`);
     }
   }, [addLog]);
 
   const handleStopDownload = useCallback(async (methodId: DownloadMethodId) => {
-    if (methodId !== 'sftp') {
-      addLog(`[${methodId.toUpperCase()}] Stop action not supported.`);
-      return;
-    }
     try {
-      await fetch('/api/stop', { method: 'POST' });
+      await fetch(`/api/stop/${methodId}`, { method: 'POST' });
     } catch (error) {
-      console.error('Failed to stop SFTP download:', error);
-      addLog('[SFTP] Failed to stop download. Check backend connectivity.');
+      console.error(`Failed to stop ${methodId} download:`, error);
+      addLog(`[${methodId.toUpperCase()}] Failed to stop. Check backend connectivity.`);
     }
   }, [addLog]);
 
@@ -83,6 +75,10 @@ const App: React.FC = () => {
     const storedAuth = localStorage.getItem('isAuthenticated');
     if (storedAuth === 'true') {
       setIsAuthenticated(true);
+    }
+    const storedUser = localStorage.getItem('username');
+    if (storedUser) {
+      setUsername(storedUser);
     }
     const storedLogo = localStorage.getItem('appLogo');
     if (storedLogo) {
@@ -105,17 +101,19 @@ const App: React.FC = () => {
         }
         if (typeof data.running === 'boolean') {
           setIsBackupRunning(data.running);
+        }
+        if (data.methods) {
           setDownloadMethods(prev =>
-            prev.map(method =>
-              method.id === 'sftp'
-                ? {
-                    ...method,
-                    isRunning: data.running,
-                    progress: data.running ? 50 : 0,
-                    lastResult: data.running ? 'Downloading...' : 'Idle',
-                  }
-                : method
-            )
+            prev.map(method => {
+              const status = data.methods[method.id];
+              if (!status) return method;
+              return {
+                ...method,
+                isRunning: status.running,
+                progress: status.progress,
+                lastResult: status.last_result,
+              };
+            })
           );
         }
         if (Array.isArray(data.cpu_history)) {
@@ -144,14 +142,18 @@ const App: React.FC = () => {
     handleStartDownload('sftp');
   };
 
-  const handleLoginSuccess = () => {
+  const handleLoginSuccess = (user: string) => {
     localStorage.setItem('isAuthenticated', 'true');
+    localStorage.setItem('username', user);
+    setUsername(user);
     setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('username');
     setIsAuthenticated(false);
+    setUsername('admin');
     setCurrentView('dashboard');
     setCpuData([]); // Clear CPU data on logout
     setLogs(['[SYSTEM] Initializing Sentinel Core...']);
@@ -177,14 +179,12 @@ const App: React.FC = () => {
                   onStartDownload={handleStartDownload}
                   onStopDownload={handleStopDownload}
                 />;
-      case 'jobs':
-        return <BackupJobs />;
       case 'files':
         return <FileManager />;
       case 'scheduler':
         return <Scheduler />;
       case 'settings':
-        return <Settings onLogoChange={handleLogoChange} />;
+        return <Settings onLogoChange={handleLogoChange} username={username} />;
       default:
         return <Dashboard 
                   cpuData={cpuData} 
@@ -206,7 +206,7 @@ const App: React.FC = () => {
     <div className="bg-gray-900 text-green-400 min-h-screen flex selection:bg-green-900 selection:text-green-300">
       <Sidebar currentView={currentView} setCurrentView={setCurrentView} logoSrc={logoSrc} />
       <div className="flex-1 flex flex-col">
-        <Header username="admin" onLogout={handleLogout} />
+        <Header username={username} onLogout={handleLogout} />
         <GlobalBackupNotification isBackupRunning={isBackupRunning} />
         <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
           {renderView()}

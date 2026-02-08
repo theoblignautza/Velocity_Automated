@@ -2,7 +2,6 @@
 import React from 'react';
 import type { ViewType } from '../types';
 import DashboardIcon from './icons/DashboardIcon';
-import JobsIcon from './icons/JobsIcon';
 import FilesIcon from './icons/FilesIcon';
 import SchedulerIcon from './icons/SchedulerIcon';
 import SettingsIcon from './icons/SettingsIcon';
@@ -38,7 +37,6 @@ const NavItem: React.FC<{
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, logoSrc }) => {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon className="w-5 h-5" /> },
-    { id: 'jobs', label: 'Backup Jobs', icon: <JobsIcon className="w-5 h-5" /> },
     { id: 'files', label: 'File Manager', icon: <FilesIcon className="w-5 h-5" /> },
     { id: 'scheduler', label: 'Scheduler', icon: <SchedulerIcon className="w-5 h-5" /> },
     { id: 'settings', label: 'Settings', icon: <SettingsIcon className="w-5 h-5" /> },
