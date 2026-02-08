@@ -8,6 +8,11 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api': 'http://localhost:8080',
+          '/download_archive': 'http://localhost:8080',
+          '/logo': 'http://localhost:8080',
+        },
       },
       plugins: [react()],
       define: {

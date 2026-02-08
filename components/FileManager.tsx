@@ -1,19 +1,45 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { BackupFile } from '../types';
-
-const initialFiles: BackupFile[] = [
-  { id: 'f1', filename: 'backup_cpanel_20240726_1400.tar.gz', size: '1.2 GB', created: '2024-07-26 14:05', job: 'cPanel - Main Web' },
-  { id: 'f2', filename: 'backup_cisco_20240725_2200.cfg', size: '12 KB', created: '2024-07-25 22:01', job: 'Office Cisco Router' },
-  { id: 'f3', filename: 'backup_unifi_20240726_0100.unf', size: '250 MB', created: '2024-07-26 01:03', job: 'UniFi Controller' },
-  { id: 'f4', filename: 'backup_sftp_20240723_1830.tar.gz', size: '450 MB', created: '2024-07-23 18:35', job: 'Dev Server SFTP' },
-  { id: 'f5', filename: 'backup_cpanel_20240725_1400.tar.gz', size: '1.1 GB', created: '2024-07-25 14:05', job: 'cPanel - Main Web' },
-];
 
 const FileManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [files, setFiles] = useState<BackupFile[]>(initialFiles);
+  const [files, setFiles] = useState<BackupFile[]>([]);
   const [statusMessage, setStatusMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadFiles = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/list_archives');
+      if (!response.ok) {
+        throw new Error('Failed to load archives');
+      }
+      const data = await response.json();
+      const mappedFiles = (data as Array<{ filename: string; size: string; created: string }>).map(file => ({
+        id: file.filename,
+        filename: file.filename,
+        size: file.size,
+        created: file.created,
+        job: 'SFTP Pull',
+      }));
+      setFiles(mappedFiles);
+      if (mappedFiles.length === 0) {
+        setStatusMessage('No backup archives available yet.');
+      } else {
+        setStatusMessage('');
+      }
+    } catch (error) {
+      console.error('Failed to fetch archives:', error);
+      setStatusMessage('Unable to load archives. Check backend connectivity.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadFiles();
+  }, []);
 
   const filteredFiles = files.filter(file => 
       file.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -21,28 +47,12 @@ const FileManager: React.FC = () => {
   );
 
   const handleDelete = (fileId: string) => {
-    setFiles(prevFiles => prevFiles.filter(file => file.id !== fileId));
-    setStatusMessage('File entry removed.');
+    setStatusMessage(`Delete request queued for ${fileId}. Backend delete is not configured.`);
   };
 
   const handleDownload = (file: BackupFile) => {
-    setStatusMessage(`Preparing download for ${file.filename}...`);
-    try {
-      const contents = `Backup file: ${file.filename}\nSource: ${file.job}\nCreated: ${file.created}\n`;
-      const blob = new Blob([contents], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = file.filename.replace('.tar.gz', '.txt');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      setStatusMessage(`Download started for ${file.filename}.`);
-    } catch (error) {
-      console.error('Download failed:', error);
-      setStatusMessage('Download failed. Check console for details.');
-    }
+    setStatusMessage(`Starting download for ${file.filename}...`);
+    window.open(`/download_archive/${encodeURIComponent(file.filename)}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleRestore = (file: BackupFile) => {
@@ -64,8 +74,14 @@ const FileManager: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-gray-950/30 border border-green-500/20 p-3 text-xs text-green-300">
-        {statusMessage || 'Select a file action to see status updates here.'}
+      <div className="bg-gray-950/30 border border-green-500/20 p-3 text-xs text-green-300 flex items-center justify-between gap-4">
+        <span>{statusMessage || 'Select a file action to see status updates here.'}</span>
+        <button
+          onClick={loadFiles}
+          className="text-xs text-green-300 border border-green-500 px-3 py-1 hover:bg-green-700/40"
+        >
+          Refresh
+        </button>
       </div>
 
       <div className="bg-gray-950/30 border border-green-500/20">
@@ -109,9 +125,14 @@ const FileManager: React.FC = () => {
                             </td>
                         </tr>
                     ))}
-                     {filteredFiles.length === 0 && (
+                     {!isLoading && filteredFiles.length === 0 && (
                         <tr>
                             <td colSpan={5} className="text-center py-8">No files found matching your search.</td>
+                        </tr>
+                    )}
+                    {isLoading && (
+                        <tr>
+                            <td colSpan={5} className="text-center py-8">Loading archives...</td>
                         </tr>
                     )}
                 </tbody>

@@ -53,7 +53,7 @@ const Settings: React.FC<SettingsProps> = ({ onLogoChange }) => {
     const [isEditingSsh, setIsEditingSsh] = useState(false);
 
     // States to hold the settings data
-    const [ftpSettings, setFtpSettings] = useState({ host: 'ftp.velocity.tech', port: 21 });
+    const [ftpSettings, setFtpSettings] = useState({ host: 'cp71.domains.co.za', port: 22000, password: 'Superadmin@123' });
     const [smtpSettings, setSmtpSettings] = useState({ host: 'smtp.g-suite.com', port: 587, user: 'backups@velocity.tech', pass: '************', from: 'backups@velocity.tech', to: 'alerts@velocity.tech' });
     const [sshSettings, setSshSettings] = useState({ host: '192.168.1.10', user: 'svc_backup', key: '' });
     
@@ -99,7 +99,7 @@ const Settings: React.FC<SettingsProps> = ({ onLogoChange }) => {
             {message && <div className="p-3 bg-green-900/50 border border-green-500 text-green-300 text-center">{message}</div>}
 
             <SettingsSection title="Default Backup Protocol Settings" isEditing={isEditingFtp} onEdit={() => setIsEditingFtp(true)} onSave={handleSaveFtp}>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {isEditingFtp ? (
                         <>
                         <div className="space-y-2">
@@ -110,11 +110,18 @@ const Settings: React.FC<SettingsProps> = ({ onLogoChange }) => {
                             <label className="text-sm text-gray-400">Default Port</label>
                             <input type="number" value={ftpSettings.port} onChange={e => setFtpSettings({...ftpSettings, port: parseInt(e.target.value)})} className="w-full bg-black/50 border border-green-700 text-green-400 focus:border-green-400 focus:outline-none p-2" />
                         </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <label className="text-sm text-gray-400">SFTP Password</label>
+                            <input type="password" value={ftpSettings.password} onChange={e => setFtpSettings({...ftpSettings, password: e.target.value})} className="w-full bg-black/50 border border-green-700 text-green-400 focus:border-green-400 focus:outline-none p-2" />
+                        </div>
                         </>
                     ) : (
                         <>
                         <DisplayField label="Default Host (FTP/SFTP)" value={ftpSettings.host} />
                         <DisplayField label="Default Port" value={ftpSettings.port} />
+                        <div className="md:col-span-2">
+                            <DisplayField label="SFTP Password" value={ftpSettings.password ? '************' : ''} />
+                        </div>
                         </>
                     )}
                 </div>
