@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Sidebar from './components/Sidebar';
@@ -20,12 +20,6 @@ const App: React.FC = () => {
   // Lifted state for global access
   const [isBackupRunning, setIsBackupRunning] = useState(false);
   const [logs, setLogs] = useState<string[]>(['[SYSTEM] Initializing Sentinel Core...']);
-
-  const downloadTimers = useRef<Record<DownloadMethodId, ReturnType<typeof setInterval> | null>>({
-    sftp: null,
-    ssh: null,
-    cpanel: null,
-  });
 
   const [downloadMethods, setDownloadMethods] = useState<DownloadMethod[]>([
     {
@@ -59,106 +53,31 @@ const App: React.FC = () => {
     setLogs(prev => [...prev.slice(-100), `[${timestamp}] ${message}`]);
   }, []);
 
-  const triggerDownload = useCallback((methodId: DownloadMethodId) => {
-    if (typeof document === 'undefined') return;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `${methodId}-backup-${timestamp}.txt`;
-    const contents = `Backup Method: ${methodId.toUpperCase()}\nTimestamp: ${new Date().toLocaleString()}\nStatus: Complete\n`;
+  const handleStartDownload = useCallback(async (methodId: DownloadMethodId) => {
+    if (methodId !== 'sftp') {
+      addLog(`[${methodId.toUpperCase()}] Download method not configured in backend.`);
+      return;
+    }
     try {
-      const blob = new Blob([contents], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      await fetch('/api/run', { method: 'POST' });
     } catch (error) {
-      console.error('Download trigger failed:', error);
+      console.error('Failed to start SFTP download:', error);
+      addLog('[SFTP] Failed to start download. Check backend connectivity.');
     }
-  }, []);
+  }, [addLog]);
 
-  const clearDownloadTimer = useCallback((methodId: DownloadMethodId) => {
-    const timer = downloadTimers.current[methodId];
-    if (timer) {
-      clearInterval(timer);
-      downloadTimers.current[methodId] = null;
+  const handleStopDownload = useCallback(async (methodId: DownloadMethodId) => {
+    if (methodId !== 'sftp') {
+      addLog(`[${methodId.toUpperCase()}] Stop action not supported.`);
+      return;
     }
-  }, []);
-
-  const handleStartDownload = useCallback((methodId: DownloadMethodId) => {
-    setDownloadMethods(prev =>
-      prev.map(method =>
-        method.id === methodId
-          ? { ...method, isRunning: true, progress: 0, lastResult: 'Initializing transfer...' }
-          : method
-      )
-    );
-
-    addLog(`[${methodId.toUpperCase()}] Starting download sequence.`);
-
-    let progress = 0;
-    clearDownloadTimer(methodId);
-
-    const timer = setInterval(() => {
-      progress = Math.min(100, progress + 10);
-      setDownloadMethods(prev =>
-        prev.map(method =>
-          method.id === methodId
-            ? { ...method, progress, lastResult: `Downloading... ${progress}%` }
-            : method
-        )
-      );
-      addLog(`[${methodId.toUpperCase()}] Downloading... ${progress}%`);
-
-      if (progress >= 100) {
-        clearDownloadTimer(methodId);
-        setDownloadMethods(prev =>
-          prev.map(method =>
-            method.id === methodId
-              ? { ...method, isRunning: false, progress: 100, lastResult: 'Download complete.' }
-              : method
-          )
-        );
-        addLog(`[${methodId.toUpperCase()}] Download complete.`);
-        triggerDownload(methodId);
-      }
-    }, 600);
-
-    downloadTimers.current[methodId] = timer;
-  }, [addLog, clearDownloadTimer, triggerDownload]);
-
-  const handleStopDownload = useCallback((methodId: DownloadMethodId) => {
-    clearDownloadTimer(methodId);
-    setDownloadMethods(prev =>
-      prev.map(method =>
-        method.id === methodId
-          ? { ...method, isRunning: false, progress: 0, lastResult: 'Stopped by user.' }
-          : method
-      )
-    );
-    addLog(`[${methodId.toUpperCase()}] Download stopped by user.`);
-  }, [addLog, clearDownloadTimer]);
-
-  const stopAllDownloads = useCallback(() => {
-    (Object.keys(downloadTimers.current) as DownloadMethodId[]).forEach(methodId => {
-      clearDownloadTimer(methodId);
-    });
-    setDownloadMethods(prev =>
-      prev.map(method => ({ ...method, isRunning: false, progress: 0, lastResult: 'Idle' }))
-    );
-  }, [clearDownloadTimer]);
-
-  // Initialize logs on authentication
-  useEffect(() => {
-    if (isAuthenticated && logs.length < 2) {
-      addLog('[SYSTEM] Connection established.');
-      addLog('[INFO] Monitoring for scheduled jobs.');
+    try {
+      await fetch('/api/stop', { method: 'POST' });
+    } catch (error) {
+      console.error('Failed to stop SFTP download:', error);
+      addLog('[SFTP] Failed to stop download. Check backend connectivity.');
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
-
+  }, [addLog]);
 
   useEffect(() => {
     const storedAuth = localStorage.getItem('isAuthenticated');
@@ -171,53 +90,58 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Effect to continuously update CPU data in the background after login
   useEffect(() => {
     if (!isAuthenticated) return;
+    let isMounted = true;
 
-    const interval = setInterval(() => {
-      setCpuData(prevData => {
-        const lastUsage = prevData.length > 0 ? prevData[prevData.length - 1].usage : 50;
-        const change = (Math.random() - 0.5) * 15; // More gradual change
-        let newUsage = lastUsage + change;
-        newUsage = Math.max(5, Math.min(95, newUsage)); // Keep it within a realistic bound
-        // Occasional random spike
-        if (Math.random() > 0.95) {
-            newUsage = Math.random() * 50 + 50;
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch('/api/status');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!isMounted) return;
+        if (Array.isArray(data.logs)) {
+          setLogs(data.logs.length > 0 ? data.logs : ['[SYSTEM] Awaiting backup activity...']);
         }
+        if (typeof data.running === 'boolean') {
+          setIsBackupRunning(data.running);
+          setDownloadMethods(prev =>
+            prev.map(method =>
+              method.id === 'sftp'
+                ? {
+                    ...method,
+                    isRunning: data.running,
+                    progress: data.running ? 50 : 0,
+                    lastResult: data.running ? 'Downloading...' : 'Idle',
+                  }
+                : method
+            )
+          );
+        }
+        if (Array.isArray(data.cpu_history)) {
+          setCpuData(
+            data.cpu_history.map((point: { time: string; value: number }) => ({
+              time: point.time,
+              usage: point.value,
+            }))
+          );
+        }
+      } catch (error) {
+        console.error('Failed to fetch status:', error);
+      }
+    };
 
-        const now = new Date();
-        const newPoint = {
-          time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          usage: Math.round(newUsage),
-        };
-        const newData = [...prevData, newPoint];
-        // Keep a history of the last 100 data points
-        return newData.length > 100 ? newData.slice(newData.length - 100) : newData;
-      });
-    }, 2000);
-
-    return () => clearInterval(interval);
+    fetchStatus();
+    const interval = setInterval(fetchStatus, 2000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [isAuthenticated]);
 
   const handleRunBackup = () => {
     if (isBackupRunning) return;
-    setIsBackupRunning(true);
-    addLog('[ACTION] Manual backup process initiated by user.');
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 10;
-      addLog(`[SFTP_JOB_1] Downloading files... ${progress}%`);
-      if (progress >= 100) {
-        clearInterval(interval);
-        addLog('[SFTP_JOB_1] Download complete.');
-        addLog('[ARCHIVER] Compressing backup file: backup_20240726_1400.tar.gz');
-        setTimeout(() => {
-            addLog('[SUCCESS] Backup completed successfully.');
-            setIsBackupRunning(false);
-        }, 1000);
-      }
-    }, 500);
+    handleStartDownload('sftp');
   };
 
   const handleLoginSuccess = () => {
@@ -231,7 +155,9 @@ const App: React.FC = () => {
     setCurrentView('dashboard');
     setCpuData([]); // Clear CPU data on logout
     setLogs(['[SYSTEM] Initializing Sentinel Core...']);
-    stopAllDownloads();
+    setDownloadMethods(prev =>
+      prev.map(method => ({ ...method, isRunning: false, progress: 0, lastResult: 'Idle' }))
+    );
   };
 
   const handleLogoChange = (newLogo: string) => {
