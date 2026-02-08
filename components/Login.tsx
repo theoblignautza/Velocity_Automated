@@ -3,7 +3,7 @@ import React, { useState, FormEvent, useEffect } from 'react';
 import { velocityLogo } from './assets/velocityLogo';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (username: string) => void;
   logoSrc: string | null;
 }
 
@@ -45,19 +45,25 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, logoSrc }) => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      if (username === 'admin' && password === 'password') {
-        onLoginSuccess();
-      } else {
-        setError('Access Denied: Invalid Credentials');
-        setIsLoading(false);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!response.ok) {
+        throw new Error('Invalid credentials');
       }
-    }, 1000);
+      onLoginSuccess(username);
+    } catch (error) {
+      setError('Access Denied: Invalid Credentials');
+      setIsLoading(false);
+    }
   };
 
   return (
